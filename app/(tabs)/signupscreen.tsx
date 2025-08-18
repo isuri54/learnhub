@@ -2,51 +2,44 @@ import React, { useState } from "react";
 import { View, Text, TextInput, Image, TouchableOpacity, StyleSheet } from "react-native";
 import { Link, router } from "expo-router";
 
-export default function LoginScreen() {
+export default function SignupScreen() {
     const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
+    const [password, setPassword] = useState("");    
+    const [confirmPassword, setConfirmPassword] = useState("");    
+    const [school, setSchool] = useState("");
+    const [subject, setSubject] = useState("");
 
-    const handleLogin = () => {
-        console.log("Login with", email, password);
+    const handleSignup = () => {
+        console.log("Signup with", email, password, school, subject);
     };
 
     return(
         <View style={styles.container}>
             <Image source={require("../../assets/images/logo.png")} style={styles.image}></Image>
-
+            
             <Text style={styles.logo}>TEACHERS CONNECT</Text>
             <Text style={styles.tagline}>Where Teachers Share & Grow</Text>
+        
+            <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail}/>
+            <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry/>
+            <TextInput style={styles.input} placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry/>
+            <TextInput style={styles.input} placeholder="School" value={school} onChangeText={setSchool}/>
+            <TextInput style={styles.input} placeholder="Subject" value={subject} onChangeText={setSubject}/>
 
-            <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value="email"
-                onChangeText={setEmail}
-                keyboardType="email-address"
-            />
-            <TextInput
-                style={styles.input}
-                placeholder="Password"
-                value="password"
-                onChangeText={setPassword}
-                secureTextEntry
-            />
-
-            <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
-                <Text style={styles.loginText}>Login</Text>
+            <TouchableOpacity style={styles.signupBtn} onPress={handleSignup}>
+                <Text style={styles.signupText}>Sign Up</Text>
             </TouchableOpacity>
-
-            <Link href="/signupscreen" asChild>
+            
+            <Link href="/loginscreen" asChild>
                 <TouchableOpacity>
                     <Text style={styles.switchText}>
-                        Don't have an account? <Text style={styles.link}>Sign Up</Text>
+                        Already have an account? <Text style={styles.link}>Sign Up</Text>
                     </Text>
                 </TouchableOpacity>
             </Link>
-
+        
         </View>
-
-    )
+    );
 }
 
 const styles = StyleSheet.create ({
@@ -80,14 +73,14 @@ const styles = StyleSheet.create ({
         padding: 12,
         marginBottom: 15
     },
-    loginBtn: {
+    signupBtn: {
         backgroundColor: "#FF8C00",
         padding: 15,
         borderRadius: 8,
         width: "100%",
         alignItems: "center"
     },
-    loginText: {
+    signupText: {
         color: "#fff",
         fontWeight: "bold"
     },
