@@ -1,101 +1,174 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, Image } from "react-native";
+import React, { useEffect, useState, useRef } from "react";
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, Image, KeyboardAvoidingView, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import io from "socket.io-client";
-import { API_BASE_URL } from "@env";
+import Constants from 'expo-constants';
 
 type Message = {
     _id: string;
     sender: string;
+    receiver: string;
     text: string;
     timestamp: string;
 };
 
-type User = {
-    _id: string;
-    name: string;
-    avatar: string;
-    lastMessage?: string;
-    lastSeen?: string;
-}
-
+const API_BASE_URL = Constants.expoConfig?.extra?.API_BASE_URL ?? 'http://192.168.1.100:5000';
 const socket = io(API_BASE_URL);
 
 export default function ChatScreen() {
-    const [users, setUsers] = useState<User[]>([]);
-    const [search, setSearch] = useState("");
+    const { receiverId } = useLocalSearchParams<{ receiverId: string }>();
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [newMessage, setNewMessage] = useState("");
+    const [error, setError] = useState("");
+    const [userName, setUserName] = useState("Unknown User");
+    const flatListRef = useRef<FlatList>(null);
+    const router = useRouter();
+    const userId = "currentUserId";
 
     useEffect(() => {
-        fetch(`${API_BASE_URL}/api/users`)
-        .then(res => res.json())
-        .then(data => setUsers(data))
-        .catch(err => console.error("Error fetching users:", err));
+        if (!receiverId) {
+            setError("No receiver selected");
+            return;
+        }
+
+        fetch(`${API_BASE_URL}/api/messages/${userId}/${receiverId}`)
+            .then(res => res.json())
+            .then(data => setMessages(data))
+            .catch(err => {
+                console.error("Error fetching messages:", err);
+                setError("Failed to load messages");
+            });
 
         socket.on("newMessage", (msg: Message) => {
-            setUsers(prev =>
-                prev.map(user =>
-                    user._id === msg.sender
-                    ? {...user, lastMessage: msg.text, lastSeen: new Date(msg.timestamp).toLocaleTimeString()}
-                    : user
-                )
-            );
+            if ((msg.sender === userId && msg.receiver === receiverId) || (msg.sender === receiverId && msg.receiver === userId)) {
+                setMessages(prev => [...prev, msg]);
+                flatListRef.current?.scrollToEnd({ animated: true });
+            }
         });
 
         return () => {
             socket.off("newMessage");
         };
-    }, []);
+    }, [receiverId, userId]);
+
+    const sendMessage = () => {
+        if (!newMessage.trim()) {
+            setError("Message cannot be empty");
+            return;
+        }
+
+        const messageData = {
+            sender: userId,
+            receiver: receiverId,
+            text: newMessage,
+            timestamp: new Date().toISOString(),
+        };
+
+        socket.emit("sendMessage", messageData);
+        setNewMessage("");
+        setError("");
+    };
+
+    const renderMessage = ({ item }: { item: Message }) => {
+        const isSentByCurrentUser = item.sender === userId;
+        return (
+            <View style={[styles.messageContainer, isSentByCurrentUser ? styles.sentMessage : styles.receivedMessage]}>
+                <Text style={styles.messageText}>{item.text}</Text>
+                <Text style={styles.messageTime}>{new Date(item.timestamp).toLocaleTimeString()}</Text>
+            </View>
+        );
+    };
 
     return (
-        <View style={styles.container}>
-            <View style={styles.searchBox}>
-                <Ionicons name="search" size={20} color="gray"/>
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search"
-                    value={search}
-                    onChangeText={setSearch}
-                />
-            </View>
-
-            <FlatList
-                data={users.filter(u => u.name.toLowerCase().includes(search.toLowerCase()))}
-                keyExtractor={(item) => item._id}
-                renderItem={({item}) => (
-                    <TouchableOpacity style={styles.chatItem}>
-                        <Image source={{uri: item.avatar}} style={styles.avatar}/>
-                        <View style={{flex:1}}>
-                            <Text style={styles.name}>{item.name}</Text>
-                            <Text style={styles.lastMessage}>{item.lastMessage || "No messages yet"}</Text>
-                        </View>
-                        <Text style={styles.time}>{item.lastSeen || ""}</Text>
-                    </TouchableOpacity>
-                )}
-            />
-        </View>
+        <KeyboardAvoidingView
+            style={styles.container}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+        >
+            {error ? (
+                <Text style={styles.error}>{error}</Text>
+            ) : (
+                <>
+                    <View style={styles.header}>
+                        <TouchableOpacity onPress={() => router.back()}>
+                            <Ionicons name="arrow-back" size={24} color="#000" />
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>{userName}</Text>
+                    </View>
+                    <FlatList
+                        ref={flatListRef}
+                        data={messages}
+                        keyExtractor={(item) => item._id}
+                        renderItem={renderMessage}
+                        inverted
+                        style={styles.messageList}
+                        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                    />
+                    <View style={styles.inputContainer}>
+                        <TextInput
+                            style={styles.messageInput}
+                            value={newMessage}
+                            onChangeText={setNewMessage}
+                            placeholder="Type a message..."
+                        />
+                        <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
+                            <Ionicons name="send" size={20} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+                </>
+            )}
+        </KeyboardAvoidingView>
     );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 15 },
-  searchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f1f1f1",
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  searchInput: { marginLeft: 10, flex: 1 },
-  chatItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 15 },
-  name: { fontWeight: "bold", fontSize: 16 },
-  lastMessage: { color: "gray", fontSize: 14 },
-  time: { color: "gray", fontSize: 12 },
+    container: { flex: 1, backgroundColor: "#fff" },
+    header: {
+        flexDirection: "row",
+        alignItems: "center",
+        padding: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: "#eee",
+    },
+    headerTitle: { fontSize: 18, fontWeight: "bold", marginLeft: 10 },
+    messageList: { flex: 1, padding: 10 },
+    messageContainer: {
+        maxWidth: "70%",
+        marginVertical: 5,
+        padding: 10,
+        borderRadius: 10,
+    },
+    sentMessage: {
+        backgroundColor: "#DCF8C6",
+        alignSelf: "flex-end",
+    },
+    receivedMessage: {
+        backgroundColor: "#E8E8E8",
+        alignSelf: "flex-start",
+    },
+    messageText: { fontSize: 16 },
+    messageTime: { fontSize: 12, color: "gray", textAlign: "right" },
+    inputContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        padding: 10,
+        borderTopWidth: 1,
+        borderTopColor: "#eee",
+    },
+    messageInput: {
+        flex: 1,
+        padding: 10,
+        borderWidth: 1,
+        borderColor: "#ccc",
+        borderRadius: 20,
+        marginRight: 10,
+    },
+    sendButton: {
+        backgroundColor: "#FF8C00",
+        padding: 10,
+        borderRadius: 20,
+        justifyContent: "center",
+    },
+    error: { textAlign: "center", color: "red", padding: 10 },
 });
